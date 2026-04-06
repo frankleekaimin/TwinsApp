@@ -8,8 +8,11 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -50,6 +53,13 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.webview)
         webView.addJavascriptInterface(TwinsAppBridge(), "TwinsApp")
+
+        // Pad WebView so content sits below the status bar and above the nav bar
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
 
         webView.settings.apply {
             javaScriptEnabled = true
@@ -93,6 +103,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Back press: if a chat is open, switch to chat list; otherwise exit
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (chatOpen) {
+                    webView.evaluateJavascript(
+                        "window._twinsGoBack && window._twinsGoBack()", null
+                    )
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+
         webView.loadUrl("https://web.whatsapp.com")
     }
 
@@ -102,15 +126,16 @@ class MainActivity : AppCompatActivity() {
                 if (window._twinsInjected) return;
                 window._twinsInjected = true;
 
-                function getLeft()  { return document.querySelector('._ak9p') && document.querySelector('._ak9p').parentElement; }
-                function getRight() { return document.querySelector('._ajx_') && document.querySelector('._ajx_').parentElement; }
-
-                function isChatOpen() {
-                    var right = getRight();
-                    return right ? !!right.querySelector('footer') : false;
+                function getLeft()  {
+                    var el = document.querySelector('._ak9p');
+                    return el ? el.parentElement : null;
+                }
+                function getRight() {
+                    var el = document.querySelector('._ajx_');
+                    return el ? el.parentElement : null;
                 }
 
-                // ── BACK BUTTON ──────────────────────────────────────────────
+                // ── BACK BUTTON ──────────────────────────────────────────
                 var backBtn = document.createElement('div');
                 backBtn.id = '_twins_back';
                 backBtn.innerHTML = '&#8592;';
@@ -132,77 +157,10 @@ class MainActivity : AppCompatActivity() {
                     s.setProperty('cursor',        'pointer',          'important');
                 })(backBtn.style);
 
-                backBtn.addEventListener('click', goBack);
-                window._twinsGoBack = goBack;
-
-                // ── OBSERVER (created here, connected/disconnected as needed) ──
-                var observer = new MutationObserver(applyLayout);
-                function connectObserver() {
-                    observer.observe(document.body, { childList: true, subtree: true });
-                }
-
-                function goBack() {
-                    // 1. Disconnect observer so it can't snap us back
-                    observer.disconnect();
-
-                    // 2. Switch to chat list view
-                    lastOpen = false;
-                    switchPanels(false);
-                    history.back();
-                    if (window.TwinsApp) TwinsApp.setChatOpen(false);
-
-                    // 3. Wait until WhatsApp finishes processing back-navigation
-                    //    (footer gone from right panel for 500ms), then reconnect.
-                    var lastSeen = Date.now();
-                    var checkId = setInterval(function() {
-                        var right = getRight();
-                        if (right && right.querySelector('footer')) {
-                            lastSeen = Date.now();
-                        } else if (Date.now() - lastSeen > 500) {
-                            clearInterval(checkId);
-                            cleanupAndReconnect();
-                        }
-                    }, 100);
-
-                    // 4. Fast-path: if user taps a chat before WhatsApp finishes,
-                    //    reconnect immediately so the new chat opens.
-                    var left = getLeft();
-                    var onTap = null;
-                    if (left) {
-                        onTap = function() {
-                            left.removeEventListener('click', onTap, true);
-                            onTap = null;
-                            clearInterval(checkId);
-                            // Give WhatsApp 300ms to process the click and add footer
-                            setTimeout(cleanupAndReconnect, 300);
-                        };
-                        left.addEventListener('click', onTap, true);
-                    }
-
-                    // 5. Safety: reconnect after 5s no matter what
-                    var safetyId = setTimeout(function() {
-                        clearInterval(checkId);
-                        cleanupAndReconnect();
-                    }, 5000);
-
-                    var cleaned = false;
-                    function cleanupAndReconnect() {
-                        if (cleaned) return;
-                        cleaned = true;
-                        clearInterval(checkId);
-                        clearTimeout(safetyId);
-                        if (onTap && left) left.removeEventListener('click', onTap, true);
-                        connectObserver();
-                        applyLayout();
-                    }
-                }
-
-                // ── SIDEBAR HIDER ─────────────────────────────────────────
+                // ── SIDEBAR HIDER ────────────────────────────────────────
                 // WhatsApp Web has a narrow icon sidebar (nav rail) on the
-                // far left. Hide it to reclaim screen width on mobile.
+                // far left.  Hide it to reclaim screen width on mobile.
                 function hideSidebar() {
-                    // The sidebar is typically a narrow sibling before the panels.
-                    // Find it by looking for a narrow element that's a sibling of the left panel.
                     var left = getLeft();
                     if (!left) return;
                     var parent = left.parentElement;
@@ -210,17 +168,16 @@ class MainActivity : AppCompatActivity() {
                     Array.from(parent.children).forEach(function(child) {
                         if (child === left || child === getRight()) return;
                         var rect = child.getBoundingClientRect();
-                        // Sidebar is narrow (< 80px wide) and tall
                         if (rect.width > 0 && rect.width < 80 && rect.height > 200) {
                             child.style.setProperty('display', 'none', 'important');
                         }
                     });
                 }
 
-                // ── PANEL SWITCHING ──────────────────────────────────────────
-                // Uses flexbox to collapse/expand panels instead of position:fixed
-                // + z-index. This avoids creating stacking contexts that trap
-                // WhatsApp's popup inside the panel.
+                // ── PANEL SWITCHING ──────────────────────────────────────
+                // Uses flexbox to collapse/expand panels.  No position:fixed
+                // tricks, so WhatsApp's popups aren't trapped by a stacking
+                // context inside a panel.
                 function switchPanels(open) {
                     var left  = getLeft();
                     var right = getRight();
@@ -229,12 +186,11 @@ class MainActivity : AppCompatActivity() {
                     hideSidebar();
 
                     if (open) {
-                        // Collapse left, expand right
-                        left.style.setProperty('flex',       '0 0 0px', 'important');
-                        left.style.setProperty('max-width',  '0',       'important');
-                        left.style.setProperty('min-width',  '0',       'important');
-                        left.style.setProperty('overflow',   'hidden',  'important');
-                        left.style.setProperty('visibility', 'hidden',  'important');
+                        left.style.setProperty('flex',       '0 0 0px',  'important');
+                        left.style.setProperty('max-width',  '0',        'important');
+                        left.style.setProperty('min-width',  '0',        'important');
+                        left.style.setProperty('overflow',   'hidden',   'important');
+                        left.style.setProperty('visibility', 'hidden',   'important');
 
                         right.style.setProperty('flex',       '1 1 100%', 'important');
                         right.style.setProperty('max-width',  'none',     'important');
@@ -242,12 +198,11 @@ class MainActivity : AppCompatActivity() {
                         right.style.setProperty('overflow',   'visible',  'important');
                         right.style.setProperty('visibility', 'visible',  'important');
                     } else {
-                        // Collapse right, expand left
-                        right.style.setProperty('flex',       '0 0 0px', 'important');
-                        right.style.setProperty('max-width',  '0',       'important');
-                        right.style.setProperty('min-width',  '0',       'important');
-                        right.style.setProperty('overflow',   'hidden',  'important');
-                        right.style.setProperty('visibility', 'hidden',  'important');
+                        right.style.setProperty('flex',       '0 0 0px',  'important');
+                        right.style.setProperty('max-width',  '0',        'important');
+                        right.style.setProperty('min-width',  '0',        'important');
+                        right.style.setProperty('overflow',   'hidden',   'important');
+                        right.style.setProperty('visibility', 'hidden',   'important');
 
                         left.style.setProperty('flex',       '1 1 100%', 'important');
                         left.style.setProperty('max-width',  'none',     'important');
@@ -260,29 +215,66 @@ class MainActivity : AppCompatActivity() {
                     if (window.TwinsApp) TwinsApp.setChatOpen(open);
                 }
 
-                // ── LAYOUT DETECTION ─────────────────────────────────────────
-                var lastOpen = null;
-                function applyLayout() {
-                    var open = isChatOpen();
-                    if (open === lastOpen) return;
-                    lastOpen = open;
-                    switchPanels(open);
+                // ── GO BACK ──────────────────────────────────────────────
+                // Pure CSS panel switch.  WhatsApp Web has no concept of
+                // "closing" a chat — the right panel stays loaded.  We just
+                // hide it and show the chat list.
+                function goBack() {
+                    switchPanels(false);
                 }
 
-                window.addEventListener('hashchange', applyLayout);
-                window.addEventListener('popstate',   applyLayout);
-                connectObserver();
-                applyLayout();
+                backBtn.addEventListener('click', goBack);
+                window._twinsGoBack = goBack;
+
+                // ── CHAT-LIST CLICK DETECTION ────────────────────────────
+                // Only trigger switchPanels(true) when the user taps inside
+                // the scrollable chat list, not the header / search / filter
+                // area.  We detect "scrollable ancestor" structurally: walk
+                // up from the click target and check for overflow-y: auto|scroll
+                // before reaching the left panel root.
+                function isInChatList(target) {
+                    var left = getLeft();
+                    if (!left) return false;
+                    var el = target;
+                    while (el && el !== left) {
+                        var ov = getComputedStyle(el).overflowY;
+                        if (ov === 'auto' || ov === 'scroll') return true;
+                        el = el.parentElement;
+                    }
+                    return false;
+                }
+
+                function setupClickListener() {
+                    var left = getLeft();
+                    if (!left) return false;
+                    // Capture phase fires before WhatsApp's own handlers,
+                    // so the panel switches immediately on tap.
+                    left.addEventListener('click', function(e) {
+                        if (isInChatList(e.target)) {
+                            switchPanels(true);
+                        }
+                    }, true);
+                    return true;
+                }
+
+                // ── INITIALISATION ───────────────────────────────────────
+                // WhatsApp Web loads progressively.  Poll until both panels
+                // exist, then set up the click listener and initial layout.
+                function init() {
+                    if (!getLeft() || !getRight()) {
+                        setTimeout(init, 500);
+                        return;
+                    }
+                    setupClickListener();
+                    // If a session was restored with a chat already open,
+                    // show the chat view; otherwise show the chat list.
+                    var right = getRight();
+                    var chatIsOpen = right && !!right.querySelector('footer');
+                    switchPanels(chatIsOpen);
+                }
+                init();
             })();
         """.trimIndent()
         view.evaluateJavascript(js, null)
-    }
-
-    override fun onBackPressed() {
-        if (chatOpen) {
-            webView.evaluateJavascript("window._twinsGoBack && window._twinsGoBack()", null)
-        } else {
-            super.onBackPressed()
-        }
     }
 }
