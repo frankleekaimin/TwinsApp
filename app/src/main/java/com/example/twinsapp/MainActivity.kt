@@ -155,15 +155,15 @@ class MainActivity : AppCompatActivity() {
                 document.body.appendChild(backBtn);
                 (function(s) {
                     s.setProperty('position',      'fixed',            'important');
-                    s.setProperty('top',           '14px',             'important');
+                    s.setProperty('top',           '70px',             'important');
                     s.setProperty('left',          '8px',              'important');
                     s.setProperty('z-index',       '99998',            'important');
-                    s.setProperty('display',       'none',             'important');
-                    s.setProperty('width',         '38px',             'important');
-                    s.setProperty('height',        '38px',             'important');
-                    s.setProperty('line-height',   '38px',             'important');
-                    s.setProperty('text-align',    'center',           'important');
-                    s.setProperty('font-size',     '22px',             'important');
+                    s.setProperty('display',         'none',             'important');
+                    s.setProperty('width',           '38px',             'important');
+                    s.setProperty('height',          '38px',             'important');
+                    s.setProperty('align-items',     'center',           'important');
+                    s.setProperty('justify-content', 'center',           'important');
+                    s.setProperty('font-size',       '22px',             'important');
                     s.setProperty('color',         '#ffffff',          'important');
                     s.setProperty('background',    'rgba(0,0,0,0.45)', 'important');
                     s.setProperty('border-radius', '50%',              'important');
@@ -224,7 +224,7 @@ class MainActivity : AppCompatActivity() {
                         left.style.setProperty('visibility', 'visible',  'important');
                     }
 
-                    backBtn.style.setProperty('display', open ? 'block' : 'none', 'important');
+                    backBtn.style.setProperty('display', open ? 'flex' : 'none', 'important');
                     if (window.TwinsApp) TwinsApp.setChatOpen(open);
                 }
 
@@ -236,7 +236,43 @@ class MainActivity : AppCompatActivity() {
                     switchPanels(false);
                 }
 
-                backBtn.addEventListener('click', goBack);
+                // ── DRAGGABLE BACK BUTTON ────────────────────────────────
+                var dragging = false;
+                var dragMoved = false;
+                var dragStartX, dragStartY, btnStartX, btnStartY;
+
+                backBtn.addEventListener('touchstart', function(e) {
+                    var t = e.touches[0];
+                    dragging = true;
+                    dragMoved = false;
+                    dragStartX = t.clientX;
+                    dragStartY = t.clientY;
+                    btnStartX = parseInt(backBtn.style.left) || 8;
+                    btnStartY = parseInt(backBtn.style.top)  || 14;
+                    e.preventDefault();
+                }, { passive: false });
+
+                backBtn.addEventListener('touchmove', function(e) {
+                    if (!dragging) return;
+                    var t = e.touches[0];
+                    var dx = t.clientX - dragStartX;
+                    var dy = t.clientY - dragStartY;
+                    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
+                    var newX = Math.max(0, Math.min(window.innerWidth  - 40, btnStartX + dx));
+                    var newY = Math.max(0, Math.min(window.innerHeight - 40, btnStartY + dy));
+                    backBtn.style.setProperty('left', newX + 'px', 'important');
+                    backBtn.style.setProperty('top',  newY + 'px', 'important');
+                    e.preventDefault();
+                }, { passive: false });
+
+                backBtn.addEventListener('touchend', function(e) {
+                    dragging = false;
+                    if (!dragMoved) goBack();   // treat as tap only if not dragged
+                });
+
+                backBtn.addEventListener('click', function() {
+                    if (!dragMoved) goBack();
+                });
                 window._twinsGoBack = goBack;
 
                 // ── CHAT-LIST CLICK DETECTION ────────────────────────────
