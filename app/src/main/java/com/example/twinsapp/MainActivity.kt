@@ -11,8 +11,6 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -54,13 +52,6 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webview)
         webView.addJavascriptInterface(TwinsAppBridge(), "TwinsApp")
 
-        // Pad WebView so content sits below the status bar and above the nav bar
-        ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            insets
-        }
-
         webView.settings.apply {
             javaScriptEnabled = true
             userAgentString =
@@ -70,6 +61,8 @@ class MainActivity : AppCompatActivity() {
             databaseEnabled = true
             mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             mediaPlaybackRequiresUserGesture = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
         }
 
         webView.webViewClient = object : WebViewClient() {
@@ -125,6 +118,26 @@ class MainActivity : AppCompatActivity() {
             (function() {
                 if (window._twinsInjected) return;
                 window._twinsInjected = true;
+
+                // ── VIEWPORT & OVERFLOW FIX ──────────────────────────────
+                // WhatsApp Web assumes a desktop viewport. Force it to fit
+                // the actual device screen width.
+                var meta = document.querySelector('meta[name="viewport"]');
+                if (!meta) {
+                    meta = document.createElement('meta');
+                    meta.name = 'viewport';
+                    document.head.appendChild(meta);
+                }
+                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+
+                var style = document.createElement('style');
+                style.textContent = [
+                    'html, body { max-width: 100vw !important; overflow-x: hidden !important; }',
+                    '#app, #app > div { min-width: 0 !important; width: 100vw !important; max-width: 100vw !important; }',
+                    /* strip min-width from every direct ancestor of the panel row */
+                    '[data-testid="app-wrapper"], [data-testid="default-user"] { min-width: 0 !important; }'
+                ].join(' ');
+                document.head.appendChild(style);
 
                 function getLeft()  {
                     var el = document.querySelector('._ak9p');
@@ -260,11 +273,24 @@ class MainActivity : AppCompatActivity() {
                 // ── INITIALISATION ───────────────────────────────────────
                 // WhatsApp Web loads progressively.  Poll until both panels
                 // exist, then set up the click listener and initial layout.
+                function stripMinWidths() {
+                    // Walk up from the left panel and zero out every min-width
+                    // that WhatsApp's desktop CSS hardcodes, so the layout
+                    // can compress to the actual screen width.
+                    var el = getLeft();
+                    while (el && el !== document.body) {
+                        el.style.setProperty('min-width', '0', 'important');
+                        el.style.setProperty('max-width', '100vw', 'important');
+                        el = el.parentElement;
+                    }
+                }
+
                 function init() {
                     if (!getLeft() || !getRight()) {
                         setTimeout(init, 500);
                         return;
                     }
+                    stripMinWidths();
                     setupClickListener();
                     // If a session was restored with a chat already open,
                     // show the chat view; otherwise show the chat list.
