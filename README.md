@@ -39,23 +39,6 @@ app/src/main/
 
 ### How It Works
 
-```mermaid
-flowchart TD
-    A([App Launch]) --> B[WebView loads web.whatsapp.com\nwith spoofed desktop Chrome user-agent]
-    B --> C[onPageFinished fires\ninjectAll runs]
-    C --> D[JS polls every 500 ms\nuntil both panels exist in DOM]
-    D --> E{Session restored\nwith chat open?}
-    E -->|Yes| F[Show right panel\nchat view]
-    E -->|No| G[Show left panel\nchat list]
-    G --> H[User taps a chat]
-    H --> I[Capture-phase click detected\nin scrollable chat list area]
-    I --> J[switchPanels true\nCollapse left · expand right]
-    J --> F
-    F --> K[User presses Back\nor overlay back button]
-    K --> L[switchPanels false\nCollapse right · expand left]
-    L --> G
-```
-
 1. **WebView loads `web.whatsapp.com`** with a spoofed desktop Chrome user-agent to avoid "unsupported browser" blocks.
 
 2. **JavaScript injection** (`injectAll()`) runs after page load and converts the desktop layout to mobile:
