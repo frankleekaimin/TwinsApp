@@ -1,7 +1,10 @@
-package com.example.twinsapp
+package com.frank.twinsapp
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -11,6 +14,8 @@ import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.frank.twinsapp.R
 
 class MainActivity : AppCompatActivity() {
 
@@ -19,6 +24,10 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var chatOpen = false
 
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { /* results handled passively; WebView will re-prompt if still denied */ }
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -47,7 +56,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        android.webkit.WebView.setWebContentsDebuggingEnabled(true)
+        // Request camera and mic permissions upfront so WebRTC works on first use
+        val notGranted = listOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+            .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (notGranted.isNotEmpty()) permissionLauncher.launch(notGranted.toTypedArray())
 
         webView = findViewById(R.id.webview)
         webView.addJavascriptInterface(TwinsAppBridge(), "TwinsApp")
@@ -58,7 +70,6 @@ class MainActivity : AppCompatActivity() {
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36"
             domStorageEnabled = true
-            databaseEnabled = true
             mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             mediaPlaybackRequiresUserGesture = false
             useWideViewPort = true
@@ -111,6 +122,17 @@ class MainActivity : AppCompatActivity() {
         })
 
         webView.loadUrl("https://web.whatsapp.com")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        webView.onPause()
+        CookieManager.getInstance().flush()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView.onResume()
     }
 
     private fun injectAll(view: WebView) {

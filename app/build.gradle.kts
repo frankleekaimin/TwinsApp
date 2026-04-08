@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.twinsapp"
+    namespace = "com.frank.twinsapp"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.twinsapp"
+        applicationId = "com.frank.twinsapp"
         minSdk = 29
         targetSdk = 36
         versionCode = 1

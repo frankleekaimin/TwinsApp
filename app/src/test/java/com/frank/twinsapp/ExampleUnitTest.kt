@@ -1,4 +1,4 @@
-package com.example.twinsapp
+package com.frank.twinsapp
 
 import org.junit.Test
 
