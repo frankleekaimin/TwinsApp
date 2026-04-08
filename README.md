@@ -2,6 +2,12 @@
 
 A native Android application that wraps WhatsApp Web in a mobile-friendly shell, enabling WhatsApp on secondary devices simultaneously.
 
+<p align="center">
+  <img src="screenshots/chat_list.jpeg" width="45%" alt="Chat list view" />
+  &nbsp;&nbsp;
+  <img src="screenshots/chat_view.jpeg" width="45%" alt="Chat view with attachment menu" />
+</p>
+
 ## What It Does
 
 WhatsApp Web (`web.whatsapp.com`) is designed for desktop browsers with a two-column layout: chat list on the left, active chat on the right. TwinsApp loads it inside an Android WebView and converts it to a single-column mobile experience through CSS manipulation and a thin navigation layer.
@@ -32,6 +38,23 @@ app/src/main/
 ```
 
 ### How It Works
+
+```mermaid
+flowchart TD
+    A([App Launch]) --> B[WebView loads web.whatsapp.com\nwith spoofed desktop Chrome user-agent]
+    B --> C[onPageFinished fires\ninjectAll runs]
+    C --> D[JS polls every 500 ms\nuntil both panels exist in DOM]
+    D --> E{Session restored\nwith chat open?}
+    E -->|Yes| F[Show right panel\nchat view]
+    E -->|No| G[Show left panel\nchat list]
+    G --> H[User taps a chat]
+    H --> I[Capture-phase click detected\nin scrollable chat list area]
+    I --> J[switchPanels true\nCollapse left · expand right]
+    J --> F
+    F --> K[User presses Back\nor overlay back button]
+    K --> L[switchPanels false\nCollapse right · expand left]
+    L --> G
+```
 
 1. **WebView loads `web.whatsapp.com`** with a spoofed desktop Chrome user-agent to avoid "unsupported browser" blocks.
 
@@ -99,7 +122,18 @@ WhatsApp Web loads progressively. The injected JS polls every 500ms (`init()`) u
 
 ## Known Limitations
 
+### Technical
+
 - **Obfuscated selectors**: The panel detection relies on WhatsApp Web's internal CSS classes (`_ak9p`, `_ajx_`). These can change with any WhatsApp update and would require updating.
-- **No splash screen**: The app shows a blank WebView while WhatsApp Web loads.
-- **Debug mode enabled**: `WebContentsDebuggingEnabled` is on — should be disabled for production builds.
 - **User-agent string**: Hardcoded to Chrome 120 on Windows. Should be updated periodically to avoid detection.
+
+### Features not available vs. native WhatsApp Android
+
+- **No background push notifications**: The WebView cannot receive Firebase Cloud Messaging (FCM) notifications. Alerts only arrive while the app is in the foreground.
+- **No lock-screen call UI**: Incoming voice/video calls cannot be answered from the lock screen or notification shade.
+- **No Android share target**: Other apps cannot share content (images, links, files) directly into TwinsApp via the Android share sheet.
+- **No biometric app lock**: Native WhatsApp supports fingerprint/face unlock to open the app. TwinsApp has no equivalent.
+- **No home screen widget**: The native app offers an unread-count and quick-reply widget. TwinsApp does not.
+- **No sticker store**: Downloading or managing sticker packs from the in-app store is not supported via WhatsApp Web.
+- **WhatsApp Pay unavailable**: Payments are not available on WhatsApp Web.
+- **Channels and Communities**: These features have limited or no support in WhatsApp Web and may not render correctly.
