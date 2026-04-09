@@ -8,6 +8,28 @@ A native Android application that wraps WhatsApp Web in a mobile-friendly shell,
   <img src="screenshots/chat_view.jpeg" width="45%" alt="Chat view with attachment menu" />
 </p>
 
+## Installation
+
+### Option 1: Install the APK (recommended for most users)
+
+1. Download `app-release.apk` from the [latest release](https://github.com/frankleekaimin/TwinsApp/releases/latest)
+2. On your Android phone, open **Settings → Security → Install unknown apps** and allow your file manager or browser
+3. Open the downloaded APK and tap **Install**
+
+Requires Android 10 (API 29) or higher.
+
+### Option 2: Build from source (for developers)
+
+1. Clone the repo
+2. Create `keystore.properties` in the project root (see [keystore.properties.example](keystore.properties.example) for the required format)
+3. Run `./gradlew assembleRelease`
+4. APK output: `app/build/outputs/apk/release/app-release.apk`
+
+Or build a debug APK without a keystore:
+```bash
+./gradlew assembleDebug
+```
+
 ## What It Does
 
 WhatsApp Web (`web.whatsapp.com`) is designed for desktop browsers with a two-column layout: chat list on the left, active chat on the right. TwinsApp loads it inside an Android WebView and converts it to a single-column mobile experience through CSS manipulation and a thin navigation layer.
